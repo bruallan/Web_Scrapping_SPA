@@ -1,11 +1,12 @@
 import { chromium } from 'playwright';
 import admin from 'firebase-admin';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
 
 dotenv.config();
 
-// 1. Inicialização do Firebase Admin (Acesso seguro ao banco de dados)
-// O GitHub Actions injetará as credenciais via Variáveis de Ambiente
+// 1. Inicialização do Firebase Admin (Acesso seguro ao banco de dados e storage)
 if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
   console.error('ERRO CRÍTICO: FIREBASE_SERVICE_ACCOUNT não configurado.');
   process.exit(1);
@@ -13,11 +14,13 @@ if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
+  credential: admin.credential.cert(serviceAccount),
+  storageBucket: 'gen-lang-client-0491037568.firebasestorage.app'
 });
 
 const db = admin.firestore();
-const USER_UID = process.env.USER_UID; // O seu ID de utilizador no Firebase
+const bucket = admin.storage().bucket();
+const USER_UID = process.env.USER_UID;
 
 if (!USER_UID) {
   console.error('ERRO CRÍTICO: USER_UID não configurado.');
@@ -39,7 +42,6 @@ async function run() {
       ownerId: USER_UID
     });
 
-    // Função auxiliar para enviar telemetria em tempo real
     const log = async (msg, level = 'info', progress = null) => {
       console.log(`[${level.toUpperCase()}] ${msg}`);
       
@@ -64,7 +66,7 @@ async function run() {
     // 3. A Criação do Ambiente ("A Sala Limpa")
     await log('Criando ambiente limpo. Iniciando navegador invisível (Headless Chromium).', 'info', 10);
     browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext();
+    const context = await browser.newContext({ acceptDownloads: true });
     const page = await context.newPage();
 
     // 4. A Execução (A Caminhada Espacial)
@@ -81,7 +83,6 @@ async function run() {
     await log('Efetuando login...', 'info', 40);
     await page.click('#btnLogin');
     
-    // Aguarda a navegação após o login
     await page.waitForNavigation({ waitUntil: 'networkidle' });
     await log('Login bem-sucedido. Acesso concedido.', 'success', 50);
 
@@ -91,47 +92,79 @@ async function run() {
     await page.click('#select2-franquiaSelecionadaId-container');
 
     await log('Selecionando a unidade: ADMINISTRAÇÃO', 'info', 60);
-    // Clica na opção que contém o texto ADMINISTRAÇÃO
     await page.locator('.select2-results__option', { hasText: 'ADMINISTRAÇÃO' }).click();
     
-    // Aguarda um pouco para a interface atualizar após a seleção
     await page.waitForTimeout(2000);
     await log('Unidade "ADMINISTRAÇÃO" selecionada com sucesso.', 'success', 65);
 
-    // Navegação pelos menus
-    const menus = [
-      'Home', 'Atendimento', 'Cadastros', 'Comercial', 
-      'Configurações', 'Estoque', 'Financeiro', 'Franqueadora', 
-      'Marketing', 'Relatórios'
-    ];
+    // Navegação para Atendimento > Vendas
+    await log('Acessando menu: Atendimento', 'info', 70);
+    await page.click('li.nav-item[data-item="Atendimento"] > a');
+    await page.waitForTimeout(1000);
 
-    let currentProgress = 65;
-    const progressStep = 30 / menus.length; // Distribui os 30% restantes pelos menus
+    await log('Acessando submenu: Vendas', 'info', 75);
+    await page.locator('span.item-name', { hasText: 'Vendas' }).click();
+    await page.waitForLoadState('networkidle');
 
-    for (const menu of menus) {
-      await log(`Acessando menu: ${menu}`, 'info', Math.round(currentProgress));
-      
-      // Clica no link do menu usando o atributo data-item que me forneceu
-      // Se for a Home, o seletor é um pouco diferente, mas vamos tentar o padrão primeiro
-      try {
-        if (menu === 'Home') {
-          await page.locator('span.nav-text', { hasText: 'Home' }).first().click();
-        } else {
-          await page.click(`li.nav-item[data-item="${menu}"] > a`);
-        }
-        // Aguarda 2 segundos para simular a leitura/carregamento da página
-        await page.waitForTimeout(2000);
-      } catch (e) {
-        await log(`Aviso: Não foi possível clicar no menu ${menu}.`, 'warning');
+    // Preencher filtro de data
+    await log('Configurando filtro de período (Data Início: 01/01/2025)...', 'info', 80);
+    await page.waitForSelector('#DataInicio');
+    // Preenche a data no formato YYYY-MM-DD exigido pelo input type="date"
+    await page.fill('#DataInicio', '2025-01-01');
+
+    await log('Executando pesquisa...', 'info', 85);
+    await page.click('#btnPesquisar');
+    
+    // Aguardar a tabela carregar os dados
+    await page.waitForTimeout(3000); // Espera a requisição AJAX da tabela terminar
+
+    // Fazer o download do Excel
+    await log('Iniciando extração de dados (Download Excel)...', 'info', 90);
+    
+    // Aguarda o evento de download enquanto clica no botão do Excel
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.locator('svg.fa-file-excel').click()
+    ]);
+
+    const downloadPath = await download.path();
+    const originalFileName = download.suggestedFilename();
+    await log(`Arquivo recebido: ${originalFileName}. Preparando upload para a nuvem...`, 'info', 95);
+
+    // Upload para o Firebase Storage
+    const destinationPath = `downloads/${missionRef.id}/${originalFileName}`;
+    await bucket.upload(downloadPath, {
+      destination: destinationPath,
+      metadata: {
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       }
-      
-      currentProgress += progressStep;
-    }
+    });
 
-    await log('Navegação concluída. (A extração de relatórios será implementada na próxima fase).', 'info', 95);
+    // Obter URL assinada para download no painel (válida por 7 dias)
+    const [url] = await bucket.file(destinationPath).getSignedUrl({
+      action: 'read',
+      expires: Date.now() + 7 * 24 * 60 * 60 * 1000 // 7 dias
+    });
+
+    const stats = fs.statSync(downloadPath);
+    const fileSizeInBytes = stats.size;
+
+    // Salvar metadados do arquivo no Firestore para o painel exibir
+    await db.collection('files').add({
+      missionId: missionRef.id,
+      name: originalFileName,
+      url: url,
+      size: fileSizeInBytes,
+      category: 'Vendas',
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      ownerId: USER_UID,
+      path: destinationPath
+    });
+
+    await log(`Upload concluído com sucesso! Arquivo disponível no painel.`, 'success', 98);
 
     // 5. A Autodestruição (O Fim da Missão)
-    await log('Iniciando sequência de autodestruição. Apagando rastos.', 'warning', 98);
+    await log('Iniciando sequência de autodestruição. Apagando rastos.', 'warning', 99);
     await browser.close();
 
     await missionRef.update({ 
@@ -149,7 +182,6 @@ async function run() {
         status: 'failed', 
         updatedAt: admin.firestore.FieldValue.serverTimestamp() 
       });
-      // Tenta enviar o erro para o painel
       await db.collection('logs').add({
         missionId: missionRef.id,
         message: `ERRO CRÍTICO (Fail-Gracefully): ${error.message}`,
@@ -159,7 +191,7 @@ async function run() {
       });
     }
     if (browser) await browser.close();
-    process.exit(1); // Falha a action do GitHub
+    process.exit(1);
   }
 }
 
