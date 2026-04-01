@@ -1,0 +1,159 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: missions
+    // Document ID: auto-generated
+    // Fields:
+    //   - status: string (required, enum: 'pending', 'running', 'completed', 'failed')
+    //   - progress: number (required, 0-100)
+    //   - target: string (required, length < 500)
+    //   - createdAt: timestamp (required, immutable)
+    //   - updatedAt: timestamp (required)
+    //   - ownerId: string (required, immutable)
+    //
+    // Collection: logs
+    // Document ID: auto-generated
+    // Fields:
+    //   - missionId: string (required, length < 100)
+    //   - message: string (required, length < 1000)
+    //   - level: string (required, enum: 'info', 'warning', 'error', 'success')
+    //   - timestamp: timestamp (required, immutable)
+    //   - ownerId: string (required, immutable)
+    //
+    // Collection: files
+    // Document ID: auto-generated
+    // Fields:
+    //   - missionId: string (required, length < 100)
+    //   - name: string (required, length < 200)
+    //   - url: string (required, length < 1000)
+    //   - size: number (required)
+    //   - category: string (required, length < 100)
+    //   - timestamp: timestamp (required, immutable)
+    //   - ownerId: string (required, immutable)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.ownerId;
+    }
+
+    function uidUnchanged() {
+      return !('ownerId' in request.resource.data) || request.resource.data.ownerId == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('ownerId' in request.resource.data) || request.resource.data.ownerId == resource.data.ownerId;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidMission() {
+      return hasOnlyAllowedFields(['status', 'progress', 'target', 'createdAt', 'updatedAt', 'ownerId']) &&
+             request.resource.data.status in ['pending', 'running', 'completed', 'failed'] &&
+             request.resource.data.progress is number &&
+             request.resource.data.progress >= 0 &&
+             request.resource.data.progress <= 100 &&
+             validStringLength('target', 1, 500) &&
+             request.resource.data.createdAt is timestamp &&
+             request.resource.data.updatedAt is timestamp &&
+             validStringLength('ownerId', 1, 100);
+    }
+
+    function isValidLog() {
+      return hasOnlyAllowedFields(['missionId', 'message', 'level', 'timestamp', 'ownerId']) &&
+             validStringLength('missionId', 1, 100) &&
+             validStringLength('message', 1, 1000) &&
+             request.resource.data.level in ['info', 'warning', 'error', 'success'] &&
+             request.resource.data.timestamp is timestamp &&
+             validStringLength('ownerId', 1, 100);
+    }
+
+    function isValidFile() {
+      return hasOnlyAllowedFields(['missionId', 'name', 'url', 'size', 'category', 'timestamp', 'ownerId']) &&
+             validStringLength('missionId', 1, 100) &&
+             validStringLength('name', 1, 200) &&
+             validStringLength('url', 1, 1000) &&
+             request.resource.data.size is number &&
+             validStringLength('category', 1, 100) &&
+             request.resource.data.timestamp is timestamp &&
+             validStringLength('ownerId', 1, 100);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /missions/{missionId} {
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() &&
+                       isValidMission() &&
+                       isOwner(request.resource.data.ownerId);
+      allow update: if isDocOwner() &&
+                       isValidMission() &&
+                       uidNotModified() &&
+                       areImmutableFieldsUnchanged(['createdAt', 'ownerId']);
+      allow delete: if isDocOwner();
+    }
+
+    match /logs/{logId} {
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() &&
+                       isValidLog() &&
+                       isOwner(request.resource.data.ownerId);
+      allow update: if isDocOwner() &&
+                       isValidLog() &&
+                       uidNotModified() &&
+                       areImmutableFieldsUnchanged(['timestamp', 'ownerId', 'missionId']);
+      allow delete: if isDocOwner();
+    }
+
+    match /files/{fileId} {
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() &&
+                       isValidFile() &&
+                       isOwner(request.resource.data.ownerId);
+      allow update: if isDocOwner() &&
+                       isValidFile() &&
+                       uidNotModified() &&
+                       areImmutableFieldsUnchanged(['timestamp', 'ownerId', 'missionId']);
+      allow delete: if isDocOwner();
+    }
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "name": "Transparent Automation Control Center",
+  "description": "A real-time telemetry dashboard for monitoring ephemeral digital workers.",
+  "requestFramePermissions": []
+}

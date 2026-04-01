@@ -1,0 +1,122 @@
+{
+  "entities": {
+    "Mission": {
+      "title": "Mission",
+      "description": "A single automation run or task.",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["pending", "running", "completed", "failed"],
+          "description": "The current status of the mission."
+        },
+        "progress": {
+          "type": "number",
+          "description": "The progress percentage of the mission (0-100)."
+        },
+        "target": {
+          "type": "string",
+          "description": "The target URL or system for the automation."
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "When the mission was created."
+        },
+        "updatedAt": {
+          "type": "timestamp",
+          "description": "When the mission was last updated."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "The ID of the user who owns this mission."
+        }
+      },
+      "required": ["status", "progress", "target", "createdAt", "updatedAt", "ownerId"]
+    },
+    "Log": {
+      "title": "Log",
+      "description": "A telemetry log entry for a specific mission.",
+      "type": "object",
+      "properties": {
+        "missionId": {
+          "type": "string",
+          "description": "The ID of the mission this log belongs to."
+        },
+        "message": {
+          "type": "string",
+          "description": "The log message content."
+        },
+        "level": {
+          "type": "string",
+          "enum": ["info", "warning", "error", "success"],
+          "description": "The severity level of the log."
+        },
+        "timestamp": {
+          "type": "timestamp",
+          "description": "When the log was generated."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "The ID of the user who owns this log."
+        }
+      },
+      "required": ["missionId", "message", "level", "timestamp", "ownerId"]
+    },
+    "RawFile": {
+      "title": "RawFile",
+      "description": "A file extracted during a mission.",
+      "type": "object",
+      "properties": {
+        "missionId": {
+          "type": "string",
+          "description": "The ID of the mission this file belongs to."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the file."
+        },
+        "url": {
+          "type": "string",
+          "description": "The download URL of the file."
+        },
+        "size": {
+          "type": "number",
+          "description": "The size of the file in bytes."
+        },
+        "category": {
+          "type": "string",
+          "description": "The category of the file (e.g., Atendimento, Cadastros)."
+        },
+        "timestamp": {
+          "type": "timestamp",
+          "description": "When the file was extracted."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "The ID of the user who owns this file."
+        }
+      },
+      "required": ["missionId", "name", "url", "size", "category", "timestamp", "ownerId"]
+    }
+  },
+  "firestore": {
+    "/missions/{missionId}": {
+      "schema": {
+        "$ref": "#/entities/Mission"
+      },
+      "description": "Stores all automation missions."
+    },
+    "/logs/{logId}": {
+      "schema": {
+        "$ref": "#/entities/Log"
+      },
+      "description": "Stores all telemetry logs for missions."
+    },
+    "/files/{fileId}": {
+      "schema": {
+        "$ref": "#/entities/RawFile"
+      },
+      "description": "Stores metadata for all extracted files."
+    }
+  }
+}

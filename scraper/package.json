@@ -1,0 +1,14 @@
+{
+  "name": "transparent-scraper",
+  "version": "1.0.0",
+  "description": "Motor de web scraping para a Automação Transparente",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "firebase-admin": "^12.0.0",
+    "playwright": "^1.42.1"
+  }
+}
