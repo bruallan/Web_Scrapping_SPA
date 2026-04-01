@@ -4,6 +4,7 @@ import { db, auth } from '../firebase';
 import { Mission } from '../types';
 import MissionList from './MissionList';
 import MissionDetails from './MissionDetails';
+import TriggerAction from './TriggerAction';
 import { Activity, LogOut } from 'lucide-react';
 
 export default function Dashboard() {
@@ -60,8 +61,8 @@ export default function Dashboard() {
           />
         </div>
         
-        <div className="p-4 border-t border-gray-800 text-xs text-gray-500 text-center">
-          <p>Worker execution is managed via GitHub Actions.</p>
+        <div className="p-4 border-t border-gray-800">
+          <TriggerAction />
         </div>
       </div>
 
