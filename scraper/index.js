@@ -1,5 +1,6 @@
 import { chromium } from 'playwright';
 import admin from 'firebase-admin';
+import { getFirestore } from 'firebase-admin/firestore';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
@@ -13,12 +14,12 @@ if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
 }
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-admin.initializeApp({
+const app = admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
   storageBucket: 'gen-lang-client-0491037568.firebasestorage.app'
 });
 
-const db = admin.firestore();
+const db = getFirestore(app, 'ai-studio-c42bff15-6d0a-4ab8-b4fc-0493373678f2');
 const bucket = admin.storage().bucket();
 const USER_UID = process.env.USER_UID;
 
