@@ -104,7 +104,7 @@ async function run() {
     await page.waitForTimeout(1000);
 
     await log('Acessando submenu: Vendas', 'info', 75);
-    await page.locator('span.item-name', { hasText: 'Vendas' }).click();
+    await page.locator('span.item-name', { hasText: /^Vendas$/ }).click();
     await page.waitForLoadState('networkidle');
 
     // Preencher filtro de data
