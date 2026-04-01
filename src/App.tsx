@@ -20,8 +20,13 @@ export default function App() {
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login error:", error);
+      if (error.code === 'auth/unauthorized-domain') {
+        alert(`Authentication failed: This domain (${window.location.hostname}) is not authorized in Firebase. Please add it to the Authorized Domains in your Firebase Console (Authentication > Settings > Authorized domains).`);
+      } else {
+        alert(`Authentication failed: ${error.message}`);
+      }
     }
   };
 
